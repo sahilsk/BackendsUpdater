@@ -37,8 +37,8 @@ import (
 )
 	
 //loadbalancer template
-const templateFile = "loadbalancer.conf"
-const exportFile = "default"
+const templateFile = "loadbalancer.conf.tmpl"
+const serverRestartCMD = "/etc/init.d/nginx restart"
 	
 /************ Command line input:
 *
@@ -47,14 +47,14 @@ const exportFile = "default"
 var (
 // Commad line args
 	hostname, err = os.Hostname()
-	cmd_dockerAddress = flag.String("dockerAddr", "http://199.127.219.76:4243", "docker bind addresss(Optional)")
-	cmd_since = flag.Int64("since", time.Now().Unix(), "docker events from whence(Optional)")
-	cmd_host = flag.String("host", "127.0.0.1", "hostname or IP to attach to containers(Optional)")
-	cmd_serviceRegex = flag.String("service", "dailyreport[0-9]*.stackexpress.com", "Service Pattern to track(*required)")
+	cmd_dockerAddress = flag.String("dockerAddr", "127.0.0.1:4243", "docker bind addresss(Optional)")
+	cmd_since = flag.Int64("since", time.Now().Unix(), "docker events from whence(optional)")
+	cmd_host = flag.String("host", "127.0.0.1", "hostname or IP to attach to containers(optional)")
+	cmd_serviceRegex = flag.String("service", "", "Service Pattern to track eg. app[0-9]*.stackexpress.com (*required)")
 	cmd_heartbeat = flag.Duration("heartbeat", 30*time.Second, "heartbeat interval for containers check. eg 30s , 5m, 30m (Optional)")
 	cmd_bkpDir = flag.String("bkp_dir", "", "file backup directory(Optional)")
-	cmd_template = flag.String("template", templateFile, "template file(required)")
-	cmd_exportFile = flag.String("exportfile", exportFile, "Export file path(Optional)")
+	cmd_template = flag.String("template", templateFile, "template file(*required)")
+	cmd_configFile = flag.String("config", "", "Configuration file path eg. /etc/nginx/sites-enabled/default (*required)")
 
 	
 	// Global ContainerArray
@@ -212,10 +212,12 @@ func monitorEvents( url string, queue chan Event){
 
 //go routine to udpate file after every 5 minutes
 func restartNginx() error {
-
-	out, err := exec.Command("/etc/init.d/nginx","restart").Output()
+	
+	var serverRestart = strings.Split( serverRestartCMD, " ")
+	
+	out, err := exec.Command(serverRestart[0], serverRestart[1:]... ).Output()
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	log.Printf( "%s", out)
 	if strings.Contains( string(out), "fail"){
@@ -237,15 +239,15 @@ func updateLoadbalancer(){
 		
 		//Take backup of old file
 		if len(*cmd_bkpDir) > 0 {
-			err = os.Rename(*cmd_exportFile, *cmd_bkpDir +"/" +strconv.FormatInt( time.Now().UnixNano() / int64(time.Millisecond), 10 )  )
-			//err = os.Rename(*cmd_exportFile, "abc" )
+			err = os.Rename(*cmd_configFile, *cmd_bkpDir +"/" +strconv.FormatInt( time.Now().UnixNano() / int64(time.Millisecond), 10 )  )
+			//err = os.Rename(*cmd_configFile, "abc" )
 			perror(err)
 		}
 		
 		
 		log.Println("======== Updating configuration file ");
 		//Create nging config file
-		f, err := os.Create( *cmd_exportFile)
+		f, err := os.Create( *cmd_configFile)
 		perror(err)
 		
 		defer f.Close()		
@@ -329,12 +331,21 @@ func test() error{
 	return err
 }
 
+func Usage() {
+        fmt.Fprintf(os.Stderr, "Usage of %s:\n", os.Args[0])
+        flag.PrintDefaults()
+}
 
 func main(){
 	flag.Parse()
 	var _ = fmt.Println
 	var _ = http.StatusOK
 
+	//check required args
+	if len(*cmd_serviceRegex) < 1 || len(*cmd_configFile) < 1 || len(*cmd_template) < 1 {
+		Usage()
+		return
+	}
 
 	queue := make(chan Event, 100 )
 	
@@ -350,4 +361,3 @@ func main(){
 	monitorEvents( getFullURL("/events?since=1122")	, queue)
 	
 }
-

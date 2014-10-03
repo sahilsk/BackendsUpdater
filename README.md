@@ -7,7 +7,7 @@ This demon do following operation in order:
 2. Generate loadbalancer(nginx) config file with found app containers as backends(upstream servers)
 3. Listen to docker events for any 'start' or 'stop' events.
 
-    If any app container is created or stopped, it then add or removes entry respectively from loadbalancer config and restart it. Before updating config file, it takes backup of old config
+    If any app container is created or stopped, it then add or remove this entry respectively from load balancer configuration, update configuration file and restart nginx . Before updating config file, it takes backup of old configuration file
     
     
 Installation
@@ -28,19 +28,19 @@ go build main.go
 ```
 
  
-### Run Arguments
+### Usage
 
 ```
 D:\tmp\go\tryOne>main --help
-Usage of main:
-  -bkp_dir="./": file backup directory
-  -dockerAddr="http://199.127.219.76:4243": docker bind addresss
-  -exportfile="default": Export file path
-  -heartbeat=30s: heartbeat interval for containers check
-  -host="DRAGONAIDER": hostname
-  -service="dailyreport[0-9]*.stackexpress.com": Service Pattern to track
-  -since=1412342469: docker events from whence
-  -template="loadbalancer.conf": template file
+Usage:
+  -bkp_dir="": file backup directory(Optional)
+  -config="": Configuration file path(*required) eg. /etc/nginx/sites-enabled/default
+  -dockerAddr="0.0.0.0:4243": docker bind addresss(Optional)
+  -heartbeat=30s: heartbeat interval for containers check. eg 30s , 5m, 30m (Optional)
+  -host="127.0.0.1": hostname or IP to attach to containers(optional)
+  -service="": Service Pattern to track(*required)
+  -since=1412355983: docker events from whence(optional)
+  -template="loadbalancer.conf": template file(required)
 
 ```
 
@@ -52,6 +52,86 @@ Usage of main:
 * **service** : Regex service pattern to find app containers
 * **since** : To track events since XXX
 * **template** : load balancer config template
+
+
+### Example
+
+```
+main -dockerAddr http://199.127.219.76:4243  -service "dailyReport[0-9]*.stackepress.com" -config "default"
+```
+
+
+System V init script template
+=============================
+
+A simple template for init scripts that provide the start, stop,
+restart and status commands.
+
+Handy for [Node.js](http://http://nodejs.org/) apps and everything
+else that runs itself.
+
+Getting started
+---------------
+
+Copy _backendUpdater_ to /etc/init.d and rename it to something
+meaningful. Then edit the script and enter that name after _Provides:_
+(between _### BEGIN INIT INFO_ and _### END INIT INFO_).
+
+Now set the following three variables in the script:
+
+### dir ###
+
+The working directory of your process.
+
+### user ###
+
+The user that should execute the command.
+
+### cmd ###
+
+The command line to start the process.
+
+Here's an example for an app called
+[backendUpdater](http://backendUpdater.ubercode.de):
+
+    dir="/var/apps/backendUpdater"
+    user="node"
+    cmd="node server.js"
+
+Script usage
+------------
+
+### Start ###
+
+Starts the app.
+
+    /etc/init.d/backendUpdater start
+
+### Stop ###
+
+Stops the app.
+
+    /etc/init.d/backendUpdater stop
+
+### Restart ###
+
+Restarts the app.
+
+    /etc/init.d/backendUpdater restart
+
+### Status ###
+
+Tells you whether the app is running. Exits with _0_ if it is and _1_
+otherwise.
+
+    /etc/init.d/backendUpdater status
+
+Logging
+-------
+
+By default, standard output goes to _/var/log/scriptname.log_ and
+error output to _/var/log/scriptname.err_. If you're not happy with
+that, change the variables `stdout_log` and `stderr_log`.
 
 
 How code works?
@@ -67,5 +147,9 @@ Goals before writing code
 	- If app container list is changed, then only loadbalancer config file is updated and nginx restarted, else nothing happened
 
 
+RoadMap
+--------------
 
+- Backends healthcheck 
+- Remove unhealthy backends
  
