@@ -89,12 +89,11 @@ The user that should execute the command.
 
 The command line to start the process.
 
-Here's an example for an app called
-[backendUpdater](http://backendUpdater.ubercode.de):
+Here's an example for an app called backendUpdater
 
     dir="/var/apps/backendUpdater"
-    user="node"
-    cmd='/usr/bin/backendUpdater -dockerAddr http://127.0.0.1:4243  -service "dailyReport[0-9]*.stackepress.com" -config "default" '
+    user="root"
+    cmd='/var/apps/backendUpdater/main -dockerAddr http://127.0.0.1:4243  -service "dailyReport[0-9]*.stackepress.com" -config "default" '
 
 Script usage
 ------------
