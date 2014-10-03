@@ -24,6 +24,7 @@ Installation
 #Steps to build
 git clone project
 go build main.go
+mv main backendUpdater
 
 ```
 
@@ -67,9 +68,6 @@ System V init script template
 A simple template for init scripts that provide the start, stop,
 restart and status commands.
 
-Handy for [Node.js](http://http://nodejs.org/) apps and everything
-else that runs itself.
-
 Getting started
 ---------------
 
@@ -96,7 +94,7 @@ Here's an example for an app called
 
     dir="/var/apps/backendUpdater"
     user="node"
-    cmd="node server.js"
+    cmd='/usr/bin/backendUpdater -dockerAddr http://127.0.0.1:4243  -service "dailyReport[0-9]*.stackepress.com" -config "default" '
 
 Script usage
 ------------
