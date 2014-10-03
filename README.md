@@ -2,6 +2,7 @@ Backends Updater
 =====================
 
 This demon do following operation in order:
+
 1. Get list of running containers and identify app containers using specified regex pattern
 2. Generate loadbalancer(nginx) config file with found app containers as backends(upstream servers)
 3. Listen to docker events for any 'start' or 'stop' events.
