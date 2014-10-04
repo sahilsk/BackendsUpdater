@@ -38,7 +38,7 @@ import (
 	
 //loadbalancer template
 const templateFile = "loadbalancer.conf.tmpl"
-const serverRestartCMD = "/etc/init.d/nginx restart"
+const serverRestartCMD = "/usr/bin/service nginx restart"
 	
 /************ Command line input:
 *
@@ -93,6 +93,7 @@ type Container struct{
 	Name string
 	Ip string
 	Port uint
+	Status string
 }
 
 func getFullURL( cmd string) string {
@@ -100,7 +101,7 @@ func getFullURL( cmd string) string {
 	var (
 		containers = regexp.MustCompile(`^/containers/json*`)
 		container = regexp.MustCompile(`^/containers/[a-z0-9]*/json*`)
-		events = regexp.MustCompile(`^/events/*`)
+		events = regexp.MustCompile(`^/events*`)
 		version = regexp.MustCompile(`^/version*`)
 	)
 
@@ -129,6 +130,9 @@ func inspectContainer( Id string){
 	
 	resp, err := http.Get( getFullURL("/containers/" + Id + "/json") )
 	perror(err)
+	
+	defer resp.Body.Close()
+	
 	var response ContainerResp
 	err = json.NewDecoder( resp.Body).Decode( &response)
 	
@@ -139,57 +143,46 @@ func inspectContainer( Id string){
 	for k, v := range( response.HostConfig.PortBindings) {
 		fmt.Printf("%s => %s\n", k, v[0].HostPort)
 	}
-	
-
-
 }
 
 //Get containers whose name matching cmd_serviceRegex
 func getMatchedContainers( url string) []Container {
 	
-	log.Println("Get: " + url )
 	resp, err := http.Get(url)
+	perror(err)
 	
 	defer resp.Body.Close()
-	perror(err)
 
-	
 	var watchedServiceRegex = regexp.MustCompile(*cmd_serviceRegex)
 	
 	var  response ContainerListResp
 	err = json.NewDecoder( resp.Body).Decode( &response)
-	
+	perror(err)
 	
 	var cArray = []Container{};
 	
 	for _,  item := range(response) {
 		
-	//	fmt.Printf( "%s \t| %s \t| %s \t| %d:%d \n", string(item.Command[:24]), string(item.Id[:12]), item.Status, item.Ports[0].PublicPort,item.Ports[0].PrivatePort)
+		//fmt.Printf( "%s \t| %s \t| %s \t| %d:%d \n", string(item.Command[:24]), string(item.Id[:12]), item.Status, item.Ports[0].PublicPort,item.Ports[0].PrivatePort)
 		
-		for _, name := range(item.Names) {
-			
+		for  _, name := range(item.Names) {
+			// Is app container i.e Matching Service Pattern ?
 			if watchedServiceRegex.MatchString(name){
-				var container Container = Container{ item.Id, name, *cmd_host, item.Ports[0].PublicPort}
+				var container Container = Container{ item.Id, name, *cmd_host, item.Ports[0].PublicPort, item.Status}
 				cArray = append(cArray, container)
 				break;
 			}
-		}		
+		}
 	}
-	
-
 	return cArray
-	
 }
 
 func monitorEvents( url string, queue chan Event){
 	
-	
-	log.Println("Get: " + url )
 	resp, err := http.Get(url)
 	perror(err)
 	
 	defer resp.Body.Close()
-	
 	
 	dec := json.NewDecoder( resp.Body)
 	
@@ -204,14 +197,12 @@ func monitorEvents( url string, queue chan Event){
 		
 		log.Printf( "%s \t| %s \t| %s \t| %d \n", string(response.Id[:12]), response.Status, response.From, response.Time)
 		queue <- response
-			
 	}
-
 }
-
 
 //go routine to udpate file after every 5 minutes
 func restartNginx() error {
+	
 	
 	var serverRestart = strings.Split( serverRestartCMD, " ")
 	
@@ -224,12 +215,14 @@ func restartNginx() error {
 		err = errors.New("Failed to run command")
 	}
 	return err;
-	
+		
 }
 
-
-func updateLoadbalancer(){
+func updateLoadbalancer( containerArray []Container) bool{
 		
+		if len(containerArray) == 0{
+			return false
+		}
 			
 		//Template 
 		templ_loadbalancerConfig := template.New( templateFile )
@@ -259,49 +252,12 @@ func updateLoadbalancer(){
 		log.Println("======== Restarting Nginx ")
 		//Restart Nginx
 		err = restartNginx()	
-		perror(err)
-}
-
-
-func execEvent( event Event) bool{
-	var shouldUpdate = false
-	if event.Status == "start" || event.Status == "create"{
-	
-		log.Println("======== CONTAINER STARTED ==========\n")
-		var containerArray2 = getMatchedContainers( getFullURL("/containers/json") )
-		
-		var isAppContainer = false
-		for _, k := range(containerArray2) {
-			if k.Id == event.Id {
-				isAppContainer = true
-				break
-			}
-		}
-		if isAppContainer == true {
-			var hasEntry = false
-			for _, k := range(containerArray) {
-				if k.Id == event.Id {
-					hasEntry = true
-					break
-				}
-			}
-			if hasEntry == false{
-				containerArray = containerArray2
-				shouldUpdate = true
-			}
+		if err != nil {
+			log.Println(err)
 		}
 		
-	}else if event.Status == "die" || event.Status == "stop" {
-		log.Println("======== CONTAINER STOPPED ==========\n")
-		for i, item:= range(containerArray){
-			if item.Id == event.Id{
-				containerArray[i] = containerArray[ len(containerArray) -1]
-				containerArray = containerArray[ 0:len(containerArray) -1]
-			}
-		}
-	}
-	
-	return shouldUpdate
+		
+		return true
 }
 
 func eventConsumer(queue chan Event){
@@ -309,20 +265,95 @@ func eventConsumer(queue chan Event){
 	for {
 		//sleep for heartbeat interval
         time.Sleep( *cmd_heartbeat )
-		//After waking up  clear the queue and update the config
-		if len(queue) > 0 {
+		//Wake up -> clear the queue -> update the config
+		var queueLen = len(queue)
+		if queueLen > 0 {
 			var shouldUpdate = false
-			for i:=0;i < len(queue);i++{
+			
+			for i:=0; i < queueLen; i++{
 				event := <- queue
 				shouldUpdate = shouldUpdate || execEvent( event)
 			}
-			if shouldUpdate{
-				updateLoadbalancer()
+			if shouldUpdate == true{
+					containerArray = getHealthyContainers( containerArray)
+					updateLoadbalancer( containerArray )
 			}
-		}else {
-			log.Println("====== No file updated ")
 		}
     }
+}
+
+// Filter healthy container : Has "Up" Status
+func getHealthyContainers( containerArray []Container ) []Container{
+	var healthyContainerArray []Container
+	for _, item := range( containerArray){
+		if strings.Contains(strings.ToLower(item.Status), "up") {
+			healthyContainerArray = append(healthyContainerArray, item)
+		}
+	}
+	return healthyContainerArray
+}
+
+/*
+| Get list of running matched containers. 
+	Check if new container present -> update it to container list -> Restart
+|
+*/
+func execEvent( event Event) bool{
+	var shouldUpdate = false
+	if event.Status == "start" {
+		var isAppContainer = false
+
+		log.Println("======== CONTAINER STARTED ==========\n")
+		var containerArray2 = getMatchedContainers( getFullURL("/containers/json") )
+		
+		for _, k := range(containerArray2) {
+			if k.Id == event.Id {
+				isAppContainer = true
+				break
+			}
+		}
+		if isAppContainer == true {
+			var alreadyListed = false
+			for _, k := range(containerArray) {
+				if k.Id == event.Id {
+					alreadyListed = true
+					break
+				}
+			}
+			//Add app container to container list, if not present already
+			if alreadyListed == false{
+				containerArray = containerArray2
+				shouldUpdate = true
+				log.Printf("----- App container started: '%s'.\n", getContainerNameFromList(containerArray, event.Id) )
+				
+			}
+		}
+		
+	}else if event.Status == "die" || event.Status == "stop" {
+		log.Println("======== CONTAINER STOPPED ==========\n")
+		
+		//Find container id in container list -> remove if found -> update change flag to true
+		for i, item:= range(containerArray){
+			if item.Id == event.Id{
+				containerArray[i] = containerArray[ len(containerArray) -1]
+				containerArray = containerArray[ 0:len(containerArray) -1]
+				shouldUpdate = true
+				log.Printf("----- App container stopped: '%s'.\n", item.Name)		
+			}
+		}
+	}
+	
+	return shouldUpdate
+}
+
+func getContainerNameFromList( containerArray []Container, Id string) string{
+	for _, item := range( containerArray) {
+		if item.Id == Id{
+			return item.Name
+		}
+	}
+	return ""
+
 }
 
 func test() error{
@@ -346,18 +377,16 @@ func main(){
 		Usage()
 		return
 	}
-
-	queue := make(chan Event, 100 )
-	
-	go eventConsumer( queue)
 	
 	//Update config with running App container
 	containerArray := getMatchedContainers( getFullURL("/containers/json") )
-	updateLoadbalancer()
+	containerArray = getHealthyContainers( containerArray)
+	updateLoadbalancer( containerArray )
 	
-	log.Println( containerArray)
-	
+	queue := make(chan Event, 50 )
+	go eventConsumer( queue)	
+		
 	//Infinite Monitoring
-	monitorEvents( getFullURL("/events?since=1122")	, queue)
+	monitorEvents( getFullURL("/events")	, queue)
 	
 }

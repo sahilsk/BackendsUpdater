@@ -1,11 +1,15 @@
 ###
-# LastModified : 2014-10-03 22:47:00.7471407 +0530 IST
+# LastModified : 2014-10-04 15:25:11.7070378 +0530 IST
 #
 #
 
 upstream app {
     # Path to Unicorn SOCK file, as defined previously
 	
+	
+		server 127.0.0.1:49174 fail_timeout=0;
+	
+		server 127.0.0.1:49172 fail_timeout=0;
 	
 }
 

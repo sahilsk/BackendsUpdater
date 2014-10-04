@@ -58,7 +58,7 @@ Usage:
 ### Example
 
 ```
-main -dockerAddr http://199.127.219.76:4243  -service "dailyReport[0-9]*.stackepress.com" -config "default"
+ ./main -dockerAddr http://199.127.219.76:4243  -service "dailyreport[0-9]*.stackexpress.com" -config  "/etc/nginx/sites-enabled/loadbalancer.conf" -heartbeat 3m
 ```
 
 
@@ -71,7 +71,7 @@ restart and status commands.
 Getting started
 ---------------
 
-Copy _backendUpdater_ to /etc/init.d and rename it to something
+Copy _init_ to /etc/init.d and rename it to something
 meaningful. Then edit the script and enter that name after _Provides:_
 (between _### BEGIN INIT INFO_ and _### END INIT INFO_).
 
@@ -91,10 +91,16 @@ The command line to start the process.
 
 Here's an example for an app called backendUpdater
 
-    dir="/var/apps/backendUpdater"
+	... Provides:     backendUpdater_init     
+	...
+
+    dir="/opt/apps/backendUpdater"
     user="root"
     cmd='/var/apps/backendUpdater/main -dockerAddr http://127.0.0.1:4243  -service "dailyReport[0-9]*.stackepress.com" -config "default" '
 
+	# copy Init script to /etc/init.d/ 
+	cp init /etc/init.d/backendUpdater_init
+	
 Script usage
 ------------
 
@@ -102,26 +108,26 @@ Script usage
 
 Starts the app.
 
-    /etc/init.d/backendUpdater start
+    /etc/init.d/backendUpdater_init start
 
 ### Stop ###
 
 Stops the app.
 
-    /etc/init.d/backendUpdater stop
+    /etc/init.d/backendUpdater_init stop
 
 ### Restart ###
 
 Restarts the app.
 
-    /etc/init.d/backendUpdater restart
+    /etc/init.d/backendUpdater_init restart
 
 ### Status ###
 
 Tells you whether the app is running. Exits with _0_ if it is and _1_
 otherwise.
 
-    /etc/init.d/backendUpdater status
+    /etc/init.d/backendUpdater_init status
 
 Logging
 -------
