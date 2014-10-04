@@ -40,12 +40,9 @@ import (
 const templateFile = "loadbalancer.conf.tmpl"
 const serverRestartCMD = "/usr/bin/service nginx restart"
 	
-/************ Command line input:
-*
-*/
 
 var (
-// Commad line args
+	// Commad line args
 	hostname, err = os.Hostname()
 	cmd_dockerAddress = flag.String("dockerAddr", "127.0.0.1:4243", "docker bind addresss(Optional)")
 	cmd_since = flag.Int64("since", time.Now().Unix(), "docker events from whence(optional)")
@@ -96,6 +93,7 @@ type Container struct{
 	Status string
 }
 
+// Give full URL for docker endpoints
 func getFullURL( cmd string) string {
 	
 	var (
@@ -126,26 +124,7 @@ func perror( err error){
 	}
 }
 
-func inspectContainer( Id string){
-	
-	resp, err := http.Get( getFullURL("/containers/" + Id + "/json") )
-	perror(err)
-	
-	defer resp.Body.Close()
-	
-	var response ContainerResp
-	err = json.NewDecoder( resp.Body).Decode( &response)
-	
-	fmt.Println(getFullURL("/containers/" + Id + "/json"))
-//	fmt.Println(response)
-	fmt.Println(response.HostConfig.PortBindings)
-
-	for k, v := range( response.HostConfig.PortBindings) {
-		fmt.Printf("%s => %s\n", k, v[0].HostPort)
-	}
-}
-
-//Get containers whose name matching cmd_serviceRegex
+//Get containers whose name matching input service pattern
 func getMatchedContainers( url string) []Container {
 	
 	resp, err := http.Get(url)
@@ -176,7 +155,7 @@ func getMatchedContainers( url string) []Container {
 	}
 	return cArray
 }
-
+//Monitor docker events and push events into queue for eventConsumer to act on
 func monitorEvents( url string, queue chan Event){
 	
 	resp, err := http.Get(url)
@@ -200,12 +179,9 @@ func monitorEvents( url string, queue chan Event){
 	}
 }
 
-//go routine to udpate file after every 5 minutes
-func restartNginx() error {
-	
-	
+//Nginx restart function
+func restartNginx() error {	
 	var serverRestart = strings.Split( serverRestartCMD, " ")
-	
 	out, err := exec.Command(serverRestart[0], serverRestart[1:]... ).Output()
 	if err != nil {
 		return err
@@ -217,7 +193,7 @@ func restartNginx() error {
 	return err;
 		
 }
-
+// Update load balancer configuration file with running container list, followed by nginx restart operation
 func updateLoadbalancer( containerArray []Container) bool{
 		
 		if len(containerArray) == 0{
@@ -260,6 +236,8 @@ func updateLoadbalancer( containerArray []Container) bool{
 		return true
 }
 
+
+//Goroutine to execute after every 'heartbeat' interval to take action as per docker events(start/stop)
 func eventConsumer(queue chan Event){
 	
 	for {
@@ -346,6 +324,7 @@ func execEvent( event Event) bool{
 	return shouldUpdate
 }
 
+//Give you container name, on matching container ID
 func getContainerNameFromList( containerArray []Container, Id string) string{
 	for _, item := range( containerArray) {
 		if item.Id == Id{
@@ -356,12 +335,7 @@ func getContainerNameFromList( containerArray []Container, Id string) string{
 
 }
 
-func test() error{
-	//resp, err := http.Get( getFullURL("/version") )
-	
-	return err
-}
-
+//Print Usage Message
 func Usage() {
         fmt.Fprintf(os.Stderr, "Usage of %s:\n", os.Args[0])
         flag.PrintDefaults()

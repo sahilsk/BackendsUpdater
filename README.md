@@ -1,4 +1,4 @@
-Backends Updater
+Backends Updater (Alpha **)
 =====================
 
 This demon do following operation in order:
@@ -58,7 +58,7 @@ Usage:
 ### Example
 
 ```
- ./main -dockerAddr http://199.127.219.76:4243  -service "dailyreport[0-9]*.stackexpress.com" -config  "/etc/nginx/sites-enabled/loadbalancer.conf" -heartbeat 3m
+ ./main -dockerAddr http://199.127.219.76:4243  -service "dailyreport[0-9]*.stackexpress.com" -config  "/etc/nginx/sites-enabled/loadbalancer.conf" -heartbeat 30s
 ```
 
 
